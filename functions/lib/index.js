@@ -44,9 +44,26 @@ const handleUpdateDocument = async (before, after, timestamp) => {
     try {
         if (util_1.areFieldsUpdated(config_1.default, before, after)) {
             logs.debug('Detected a change, execute indexing');
-            const data = await extract_1.default(after, timestamp);
-            logs.updateIndex(after.id, data);
-            await exports.index.partialUpdateObject(data, { createIfNotExists: true });
+            const beforeData = await before.data();
+            // loop through the after data snapshot to see if any properties were removed
+            const undefinedAttrs = Object.keys(beforeData).filter(key => after.get(key) === undefined);
+            // if no attributes were removed, then use partial update of the record.
+            if (undefinedAttrs.length === 0) {
+                const data = await extract_1.default(after, timestamp);
+                logs.updateIndex(after.id, data);
+                logs.debug("execute partialUpdateObject");
+                await exports.index.partialUpdateObject(data, { createIfNotExists: true });
+            }
+            // if an attribute was removed, then use save object of the record.
+            else {
+                // saveObject is not enabled with version so execute data retrieval from
+                // firestore again to prevent race condition due to cold start of cloud function.
+                const updatedAfterData = await after.ref.get();
+                const data = await extract_1.default(updatedAfterData, timestamp);
+                logs.updateIndex(updatedAfterData.id, data);
+                logs.debug("execute saveObject");
+                await exports.index.saveObject(data);
+            }
         }
     }
     catch (e) {

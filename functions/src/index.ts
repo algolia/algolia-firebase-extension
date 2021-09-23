@@ -16,6 +16,7 @@
  */
 
 import algoliaSearch from 'algoliasearch';
+import { firestore } from 'firebase-admin';
 import * as functions from 'firebase-functions';
 import { EventContext, Change } from 'firebase-functions';
 import { DocumentSnapshot } from 'firebase-functions/lib/providers/firestore';
@@ -25,6 +26,7 @@ import extract from './extract';
 import * as logs from './logs';
 import { ChangeType, getChangeType, areFieldsUpdated } from './util';
 import { version } from './version';
+import DocumentData = firestore.DocumentData;
 
 const client = algoliaSearch(
   config.algoliaAppId,
@@ -64,9 +66,27 @@ const handleUpdateDocument = async (
     if (areFieldsUpdated(config, before, after)) {
       logs.debug('Detected a change, execute indexing');
 
-      const data = await extract(after, timestamp);
-      logs.updateIndex(after.id, data);
-      await index.partialUpdateObject(data, { createIfNotExists: true });
+      const beforeData: DocumentData = await before.data();
+      // loop through the after data snapshot to see if any properties were removed
+      const undefinedAttrs = Object.keys(beforeData).filter(key => after.get(key) === undefined);
+
+      // if no attributes were removed, then use partial update of the record.
+      if (undefinedAttrs.length === 0) {
+        const data = await extract(after, timestamp);
+        logs.updateIndex(after.id, data);
+        logs.debug("execute partialUpdateObject");
+        await index.partialUpdateObject(data, { createIfNotExists: true });
+      }
+      // if an attribute was removed, then use save object of the record.
+      else {
+        // saveObject is not enabled with version so execute data retrieval from
+        // firestore again to prevent race condition due to cold start of cloud function.
+        const updatedAfterData = await after.ref.get();
+        const data = await extract(updatedAfterData, timestamp);
+        logs.updateIndex(updatedAfterData.id, data);
+        logs.debug("execute saveObject");
+        await index.saveObject(data);
+      }
     }
   } catch (e) {
     logs.error(e);

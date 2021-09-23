@@ -33,14 +33,14 @@ describe('extension', () => {
   const mockedAddAlgoliaAgent = jest.fn();
 
   const mockedPartialUpdateObject = jest.fn();
-  const mockedSaveObjects = jest.fn();
+  const mockedSaveObject = jest.fn();
   const mockedDeleteObject = jest.fn();
   const mockedInitIndex = jest.fn((): {
     deleteObject: jest.Mock<any, any>;
-    saveObjects: jest.Mock<any, any>;
+    saveObject: jest.Mock<any, any>;
     partialUpdateObject: jest.Mock<any, any>
   } => ({
-    saveObjects: mockedSaveObjects,
+    saveObject: mockedSaveObject,
     deleteObject: mockedDeleteObject,
     partialUpdateObject: mockedPartialUpdateObject
   }));
@@ -158,5 +158,63 @@ describe('extension', () => {
       );
       expect(mockedPartialUpdateObject).toBeCalledWith(payload, { createIfNotExists: true });
     });
+
+    test('functions runs with an update with removed value', async () => {
+      const beforeSnapshot = functionsTest.firestore.makeDocumentSnapshot(testDocument, 'document/1');
+
+      const modifiedDocument = {
+        ...testDocument
+      };
+      // Remove attribute to simulate firebase attribute removal
+      delete modifiedDocument.popular;
+
+      const afterSnapshot = functionsTest.firestore.makeDocumentSnapshot({
+        ...modifiedDocument,
+        rating: 0
+      }, 'document/1');
+
+      afterSnapshot.ref.get = function() {
+        return new Promise((resolve) => {
+          resolve(afterSnapshot);
+        });
+      }
+
+      const documentChange = functionsTest.makeChange(
+        beforeSnapshot,
+        afterSnapshot
+      );
+
+      const data = {};
+      const callResult = await mockExport(documentChange, data);
+
+      expect(callResult).toBeUndefined();
+      expect(mockConsoleInfo).toBeCalledTimes(2);
+      expect(mockConsoleInfo).toBeCalledWith(
+        'Started extension execution with configuration',
+        functionsConfig
+      );
+      const payload = {
+        ...modifiedDocument,
+        'objectID': afterSnapshot.id,
+        'title': afterSnapshot.data().title,
+        'awards': [
+          'awards/1'
+        ],
+        'meta': {
+          'releaseDate': testReleaseDate.getTime()
+        },
+        'rating': 0,
+        'lastmodified': {
+          '_operation': 'IncrementSet',
+          'value': expect.any(Number)
+        }
+      }
+      expect(mockConsoleInfo).toBeCalledWith(
+        `Updating existing Algolia index for document ${ afterSnapshot.id }`,
+        payload
+      );
+      expect(mockedSaveObject).toBeCalledWith(payload);
+    });
   });
+
 });
