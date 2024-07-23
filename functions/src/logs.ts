@@ -39,11 +39,11 @@ export const error = (err: Error) => {
 };
 
 export const info = (...args: any) => {
-  logger.info(args);
+  if (obfuscatedConfig.verboseLogs) logger.info(args);
 };
 
 export const debug = (...args: any) => {
-  logger.debug(args);
+  if (obfuscatedConfig.verboseLogs) logger.debug(args);
 };
 
 export const createIndex = (id: string, data: object) => {
