@@ -68,7 +68,7 @@ resources:
     properties: # LOCATION is a user-configured parameter value specified by the user
       # during installation.
       location: ${LOCATION}
-      runtime: nodejs18
+      runtime: nodejs22
       eventTrigger:
         eventType: providers/cloud.firestore/eventTypes/document.write
         resource: projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${COLLECTION_PATH}/{documentID}
@@ -78,7 +78,7 @@ resources:
     description: Loads all the data from your FireStore database into Algolia
     properties:
       location: ${param:LOCATION}
-      runtime: nodejs18
+      runtime: nodejs22
       availableMemoryMb: 1024
       timeout: 540s
       taskQueueTrigger: { }
